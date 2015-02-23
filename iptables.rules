@@ -1,6 +1,10 @@
+*raw
+-A PREROUTING -p udp --match u32 --u32 "0>>22&0x3C@8=0xd80000d8" -j NFQUEUE --queue-num 0
+#-A OUTPUT -p udp --match u32 --u32 "0>>22&0x3C@8=0xd80000d8" -j NFQUEUE --queue-num 0
+COMMIT
+
 *nat
 -A POSTROUTING -o eth0 -j MASQUERADE
--A PREROUTING -p udp --match u32 --u32 "0>>22&0x3C@8=0xd80000d8" -j NFQUEUE --queue-num 0
 COMMIT
 
 *filter

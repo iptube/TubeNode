@@ -36,30 +36,54 @@ static void printPkt(struct ip *ip_pkt){
 
 
 
-static int Callback(struct nfq_q_handle *myQueue, struct nfgenmsg *msg,
-                    struct nfq_data *pkt, void *cbData)
+static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
+                    struct nfq_data *nfa, void *cbData)
 {
-    printf("Got a SPUD packet from netfilter\n");
-    uint32_t id = 0;
-    uint32_t pkt_size;
-    char *pktData;
-    struct ip *ip_pkt;
-    
-    
-    StunMessage stunPkt;
-    
-    struct nfqnl_msg_packet_hdr *header;
-    if ((header = nfq_get_msg_packet_hdr(pkt))) {
-        id = ntohl(header->packet_id);
+    struct nfqnl_msg_packet_hdr *ph;
+    int id = 0;
+    int size = 0;
+    int i;
+    unsigned char *full_packet;
+    unsigned char * c;
+    struct iphdr *ip;
+    struct in_addr ipa;
+    char src_ip_str[20];
+    char dst_ip_str[20];
+
+    ph = nfq_get_msg_packet_hdr(nfa);
+ 
+    if (ph) {
+  
+        // Print out metatdata
+        id = ntohl(ph->packet_id);
+        fprintf(stdout, "hw_protocol = 0x%04x hook = %u id = %u\n",
+                ntohs(ph->hw_protocol), ph->hook, id);
+
+        // Retrieve packet payload
+        size = nfq_get_payload(nfa, &full_packet);  
+
+        // Get IP addresses in char form
+        ip = (struct iphdr *) full_packet;
+        ipa.s_addr=ip->saddr;
+        strcpy (src_ip_str, inet_ntoa(ipa));
+        ipa.s_addr=ip->daddr;
+        strcpy (dst_ip_str, inet_ntoa(ipa));
+
+        fprintf(stdout, "Source IP: %s   Destination IP: %s\n", src_ip_str, dst_ip_str);
+
+        // Print out packet in hex
+        c = (unsigned char *)full_packet;
+        for (i=0; i<size; ++i,++c) {
+            fprintf (stdout, "%02x", (unsigned int)*c);
+        }
+        fprintf (stdout, "\n");
+
+        // Done with packet, accept it
+        nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     }
-    pkt_size = nfq_get_payload(pkt, &pktData);
-    ip_pkt = (struct ip *)pktData;
-    
-    printf("Got SPUD\n");
-    
-    printPkt(ip_pkt);
-    
-    return nfq_set_verdict(myQueue, id, NF_DROP, 0, NULL);
+
+    return 0;
+
 }
 
 int main(int argc, char **argv)
@@ -102,9 +126,12 @@ int main(int argc, char **argv)
 
   printf("Up and running, waiting for packets...\n\n");
   while ((res = recv(fd, buf, sizeof(buf), 0)) && res >= 0) {
-    nfq_handle_packet(nfqHandle, buf, res);
+      //printf("Got somthing in the queue\n");
+      nfq_handle_packet(nfqHandle, buf, res);
+
   }
 
+  printf("Should I be here?\n");
   nfq_destroy_queue(myQueue);
 
   nfq_close(nfqHandle);
